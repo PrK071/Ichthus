@@ -4,3 +4,5 @@ iloveso2.db
 __pycache__
 songs
 API spotify.py
+API spotify_token.py
+API audd.py
