@@ -8,35 +8,21 @@ BATCH_SIZE = 900
 
 
 def recognize(audio, conn) -> tuple[str | None, int]:
-    """
-    Reconhece uma música a partir de um trecho de áudio gravado.
-
-    Retorna uma tupla (nome_da_musica, confiança) onde:
-    - nome_da_musica é None se nenhuma música for encontrada
-    - confiança é o número de hashes alinhados (maior = mais certeza)
-
-    A lógica de alinhamento temporal funciona assim:
-    Para cada hash que casa entre o áudio gravado e o banco de dados,
-    calcula-se o delta = offset_banco - offset_gravação.
-    Se a música correta foi encontrada, MUITOS hashes vão ter o mesmo delta
-    (pois o trecho gravado está deslocado no tempo em relação à música completa
-    por um valor constante). Isso forma um pico no histograma de deltas.
-    Ruído e músicas erradas geram deltas aleatórios, sem pico dominante.
-    """
+    
     S_db = spectrogram(audio)
     peaks = find_peaks(S_db)
 
     if not peaks:
-        print("[recognizer] Nenhum pico encontrado no espectrograma.")
+        print("[RECOGNIZER] Nenhum pico encontrado no espectrograma.")
         return None, 0
 
     hashes = generate_hashes(peaks)
 
     if not hashes:
-        print("[recognizer] Nenhum hash gerado.")
+        print("[RECOGNIZER] Nenhum hash gerado.")
         return None, 0
 
-    print(f"[recognizer] {len(peaks)} picos, {len(hashes)} hashes gerados.")
+    print(f"[RECOGNIZER] {len(peaks)} picos, {len(hashes)} hashes gerados.")
 
     cur = conn.cursor()
 
@@ -71,7 +57,7 @@ def recognize(audio, conn) -> tuple[str | None, int]:
                 song_delta_hist[song_id][delta] += 1
 
     if not song_delta_hist:
-        print("[recognizer] Nenhum hash casou com o banco de dados.")
+        print("[RECOGNIZER] Nenhum hash casou com o banco de dados.")
         return None, 0
 
     
@@ -84,10 +70,10 @@ def recognize(audio, conn) -> tuple[str | None, int]:
             best_score = peak_count
             best_song_id = song_id
 
-    print(f"[recognizer] Melhor score: {best_score} hashes alinhados.")
+    print(f"[RECOGNIZER] Melhor score: {best_score} hashes alinhados.")
 
     if best_score < MIN_ALIGNED_MATCHES:
-        print(f"[recognizer] Score abaixo do mínimo ({MIN_ALIGNED_MATCHES}). Não reconhecido.")
+        print(f"[RECOGNIZER] Score abaixo do mínimo ({MIN_ALIGNED_MATCHES}). Não reconhecido.")
         return None, best_score
 
     cur.execute("SELECT name FROM songs WHERE id = ?", (best_song_id,))
