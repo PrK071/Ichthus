@@ -1,0 +1,6 @@
+iloveso2.db
+.env
+.cache
+__pycache__
+songs
+API spotify.py
