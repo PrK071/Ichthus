@@ -22,7 +22,7 @@ if __name__ == "__main__":
         if name:
             print(f"Música reconhecida: {name}  (confiança: {score})")
         else:
-            print(f"Música não reconhecida. (melhor score: {score})")
+            print(f"Música não reconhecida: (melhor score: {score})")
     finally:
         conn.close()
-        print("Conexão com o banco de dados fechada.")
+        print("Conexão com o banco de dados fechada")
