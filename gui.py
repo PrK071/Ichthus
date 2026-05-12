@@ -28,7 +28,7 @@ class MusicRecognizerApp(ctk.CTk):
 
         self.btn_recognize = ctk.CTkButton(
             self,
-            text="🎙️ Ouvir Música",
+            text="Ouvir Música",
             command=self.start_recognition_thread,
             height=50,
             font=("Roboto", 16),
@@ -84,7 +84,7 @@ class MusicRecognizerApp(ctk.CTk):
     def start_recognition_thread(self):
         self.btn_recognize.configure(state="disabled")
         self.btn_stop.configure(state="normal")
-        self.update_status("🎙️ Gravando...")
+        self.update_status("Ouvindo...")
         thread = threading.Thread(target=self.run_recognition, daemon=True)
         thread.start()
 
@@ -96,7 +96,7 @@ class MusicRecognizerApp(ctk.CTk):
 
             audio = record_audio(device=device_id)
 
-            self.update_status("🔍 Identificando...")
+            self.update_status("Identificando...")
             result = recognize_from_audio(audio)
 
             self.result_box.delete("0.0", "end")
