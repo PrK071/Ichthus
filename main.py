@@ -7,9 +7,9 @@ from recognizer import recognize
 if __name__ == "__main__":
     conn = init_db()
 
-    if not os.path.exists("songs"):
-        os.mkdir("songs")
-        print("Pasta 'songs' criada. Coloque seus arquivos .wav ou .mp3 lá e rode novamente.")
+    if not os.path.exists("SONGS"):
+        os.mkdir("SONGS")
+        print("Pasta 'SONGS' criada. Coloque arquivos .wav ou .mp3.")
         exit()
 
     try:
