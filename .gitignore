@@ -1,7 +1,9 @@
-.env
-.cache
-__pycache__/
-songs/
 iloveso2.db
-client_secret.json
-oauth.json
+.env
+history.json
+.cache
+__pycache__
+songs
+API spotify.py
+API spotify_token.py
+API audd.py
