@@ -58,12 +58,7 @@ def _audio_to_wav_buffer(audio: np.ndarray, sample_rate: int) -> io.BytesIO:
 
 
 def recognize_from_audio(audio: np.ndarray, sample_rate: int = 22050) -> dict[str, Any]:
-    """
-    Envia o áudio para a AudD.
-
-    Retorna sempre um dict, nunca None. Assim a interface consegue mostrar
-    o motivo do erro quando a API não reconhece ou quando o token está errado.
-    """
+    
     if not is_configured():
         return {
             "ok": False,

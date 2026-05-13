@@ -232,7 +232,6 @@ class MusicRecognizerApp(ctk.CTk):
         self.device_selector.pack(fill="x", padx=24)
         if self.input_devices:
             self.device_selector.set(self.input_devices[0])
-        # torna o campo de texto do combo somente-leitura
         self.device_selector._entry.configure(state="readonly", cursor="arrow")
 
         ctk.CTkFrame(card, height=1, fg_color=BORDER).pack(
@@ -263,7 +262,7 @@ class MusicRecognizerApp(ctk.CTk):
         self.result_box.insert("0.0", "O resultado aparecerá aqui...")
         self.result_box.configure(state="disabled")
 
-        # ── Botão limpar ──────────────────────────────────────────────────────
+        #botão de limpar
         self.btn_clear = ctk.CTkButton(
             card,
             text="Limpar",
@@ -277,7 +276,7 @@ class MusicRecognizerApp(ctk.CTk):
         )
         self.btn_clear.pack(fill="x", padx=24, pady=(10, 6))
 
-        # ── Botões de streaming lado a lado ───────────────────────────────────
+        #botões do yt e do spotify
         stream_row = ctk.CTkFrame(card, fg_color="transparent")
         stream_row.pack(fill="x", padx=24, pady=(0, 24))
 
@@ -664,7 +663,7 @@ class MusicRecognizerApp(ctk.CTk):
             if not isinstance(result, dict) or not result.get("ok"):
                 raw_text = f"{raw_text}\n\nMúsica não reconhecida."
 
-            # ── Formata e remove linhas repetidas ─────────────────────────────
+            #remove linhas repetidas
             seen, unique_lines = set(), []
             for line in (raw_text or "").splitlines():
                 key = line.strip().lower()
@@ -676,7 +675,7 @@ class MusicRecognizerApp(ctk.CTk):
             self.result_box.delete("0.0", "end")
             self.result_box.insert("0.0", clean_text if clean_text else "Música não reconhecida.")
 
-            # ── Monta query do YouTube/Spotify a partir do resultado ───────────
+            #query do yt e spotify
             query_parts = []
             if isinstance(result, dict) and result.get("ok"):
                 for key in ("title", "artist", "album"):
