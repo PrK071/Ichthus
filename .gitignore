@@ -11,4 +11,5 @@ API audd.py
 browser_extension/
 history.json
 correction_reports.json
-correction.json
+corrections.json
+mangafire_downloads/
