@@ -53,7 +53,3 @@ browser_extension/  extensao Chromium
 corrections.json    correcoes automaticas
 history.json        historico local
 ```
-
-## Nota
-
-O Ichthus nao usa mais banco de dados local para reconhecer musicas. O reconhecimento atual e feito pela AudD API.
