@@ -1,0 +1,16 @@
+[
+  {
+    "match": {
+      "artist": "Spacetoon TV",
+      "contains": [
+        "gaara"
+      ]
+    },
+    "replace": {
+      "title": "Gaara",
+      "artist": "7 Minutoz",
+      "album": ""
+    },
+    "note": "AudD costuma retornar esta faixa como Spacetoon TV - Gaara."
+  }
+]

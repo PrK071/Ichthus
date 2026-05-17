@@ -103,6 +103,8 @@ def recognize_from_audio(audio: np.ndarray, sample_rate: int = 22050) -> dict[st
             "raw": data,
         }
 
+    cover_url = _extract_cover_url(result)
+
     return {
         "ok": True,
         "provider": "AudD",
@@ -111,24 +113,101 @@ def recognize_from_audio(audio: np.ndarray, sample_rate: int = 22050) -> dict[st
         "album": result.get("album") or "",
         "release_date": result.get("release_date") or "",
         "label": result.get("label") or "",
+        "cover_url": cover_url,
         "raw": result,
     }
 
 
-def format_result(result: dict[str, Any] | None) -> str:
+def _extract_cover_url(result: dict[str, Any]) -> str:
+    spotify = result.get("spotify")
+    if isinstance(spotify, dict):
+        album = spotify.get("album")
+        if isinstance(album, dict):
+            images = album.get("images")
+            if isinstance(images, list):
+                for image in images:
+                    if isinstance(image, dict) and image.get("url"):
+                        return str(image["url"])
+
+    apple_music = result.get("apple_music")
+    if isinstance(apple_music, dict):
+        artwork = apple_music.get("artwork")
+        if isinstance(artwork, dict) and artwork.get("url"):
+            return str(artwork["url"]).replace("{w}", "500").replace("{h}", "500")
+
+    return ""
+
+
+FORMAT_TEXT = {
+    "pt": {
+        "no_response": "AudD: sem resposta.",
+        "not_recognized": "Música não reconhecida.",
+        "source": "Fonte",
+        "title": "Título",
+        "artist": "Artista",
+        "album": "Álbum",
+        "release": "Lançamento",
+        "unknown": "Desconhecido",
+    },
+    "en": {
+        "no_response": "AudD: no response.",
+        "not_recognized": "Song not recognized.",
+        "source": "Source",
+        "title": "Title",
+        "artist": "Artist",
+        "album": "Album",
+        "release": "Release",
+        "unknown": "Unknown",
+    },
+}
+
+
+def _translated_error(error: str, language: str) -> str:
+    if language != "en":
+        return error
+
+    known_errors = {
+        "AudD não reconheceu a música.": "AudD did not recognize the song.",
+        "Resposta sem sucesso da AudD.": "AudD returned an unsuccessful response.",
+        "Timeout: servidor demorou para responder.": "Timeout: the server took too long to respond.",
+        "Configure AUDD_API_TOKEN no arquivo .env. Use test para testar ou cole um token real da AudD.": (
+            "Configure AUDD_API_TOKEN in the .env file."
+        ),
+    }
+    return known_errors.get(error, error)
+
+
+def _display_value(value: Any, language: str, fallback: str) -> str:
+    normalized = str(value or "").strip()
+    if not normalized or (language == "en" and normalized == "Desconhecido"):
+        return fallback
+    return normalized
+
+
+def format_result(
+    result: dict[str, Any] | None,
+    language: str = "pt",
+    show_source: bool = True,
+) -> str:
+    text = FORMAT_TEXT.get(language, FORMAT_TEXT["pt"])
+
     if not result:
-        return "AudD: sem resposta."
+        return text["no_response"]
 
     if not result.get("ok"):
-        return f"AudD: {result.get('error', 'Música não reconhecida.')}"
+        error = result.get("error") or text["not_recognized"]
+        return f"AudD: {_translated_error(str(error), language)}"
 
-    lines = [
-        f"Fonte: {result.get('provider', 'AudD')}",
-        f"Título: {result.get('title', 'Desconhecido')}",
-        f"Artista: {result.get('artist', 'Desconhecido')}",
-    ]
+    lines = []
+    if show_source:
+        lines.append(f"{text['source']}: {result.get('provider', 'AudD')}")
+
+    lines.extend([
+        f"{text['title']}: {_display_value(result.get('title'), language, text['unknown'])}",
+        f"{text['artist']}: {_display_value(result.get('artist'), language, text['unknown'])}",
+    ])
     if result.get("album"):
-        lines.append(f"Álbum: {result['album']}")
+        lines.append(f"{text['album']}: {result['album']}")
     if result.get("release_date"):
-        lines.append(f"Lançamento: {result['release_date']}")
+        lines.append(f"{text['release']}: {result['release_date']}")
     return "\n".join(lines)
