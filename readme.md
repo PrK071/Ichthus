@@ -1,23 +1,59 @@
-# 🎵 ICHTUS
-ICHTUS é um reconhecedor de músicas via microfone com interface gráfica em dark mode. Integra a **AudD API** para identificação em nuvem e possui uma engine de **fingerprinting local** ao estilo Shazam, com histórico de reconhecimentos, correções automáticas de metadados e atalhos rápidos para YouTube e Spotify.
+# Ichthus
 
-ICHTUS is a microphone-based music recognizer with a dark mode GUI. It integrates the **AudD API** for cloud-based identification and includes a Shazam-style **local fingerprinting engine**, with recognition history, automatic metadata corrections, and quick links to YouTube and Spotify.
+Reconhecedor de musicas com app desktop e extensao para navegador.
 
-## Configuração / Setup
+Ichthus grava alguns segundos de audio, consulta a API da AudD e entrega a musica com capa ou thumbnail, historico local e atalhos para YouTube e Spotify.
 
-Crie um arquivo `.env` na raiz do projeto / Create a `.env` file at the project root:
-```env
-AUDD_API_URL=https://api.audd.io/
-AUDD_API_TOKEN=seu_token_aqui
-```
-Obtenha um token em / Get a token at [audd.io](https://audd.io). O token `test` funciona para testes rápidos / The `test` token works for quick testing.
+## Recursos
 
-Instale as dependências / Install dependencies:
+- Reconhecimento via AudD API.
+- App desktop em dark mode com CustomTkinter.
+- Extensao Chromium para Chrome, Edge, Brave e Opera.
+- Historico com imagem, reports e correcoes locais.
+- Links rapidos para YouTube e Spotify.
+- Fallback de capa por iTunes, Deezer e YouTube.
+- Idiomas PT/EN.
+
+## App Desktop
+
+Instale as dependencias:
+
 ```bash
 pip install customtkinter Pillow librosa sounddevice soundfile numpy scipy requests python-dotenv
 ```
 
-## Como usar / Usage
+Crie um `.env` na raiz:
+
+```env
+AUDD_API_URL=https://api.audd.io/
+AUDD_API_TOKEN=seu_token_audd_aqui
+```
+
+Rode:
+
 ```bash
 python main.py
 ```
+
+## Extensao
+
+1. Abra `chrome://extensions`.
+2. Ative `Modo do desenvolvedor`.
+3. Clique em `Carregar sem compactacao`.
+4. Selecione `browser_extension`.
+5. Salve seu token AudD na extensao e clique em `Ouvir Musica`.
+
+## Arquivos
+
+```text
+main.py             inicia o app desktop
+gui.py              interface do Ichthus
+API_audd.py         cliente da AudD API
+browser_extension/  extensao Chromium
+corrections.json    correcoes automaticas
+history.json        historico local
+```
+
+## Nota
+
+O Ichthus nao usa mais banco de dados local para reconhecer musicas. O reconhecimento atual e feito pela AudD API.
