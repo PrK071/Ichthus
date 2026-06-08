@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Ichthus",
+  "description": "Reconhece a musica tocando na aba atual, sem precisar abrir o app desktop.",
+  "version": "1.1.0",
+  "action": {
+    "default_title": "Ichthus",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabCapture"
+  ],
+  "host_permissions": [
+    "https://amp.shazam.com/*",
+    "https://itunes.apple.com/*",
+    "https://api.deezer.com/*",
+    "https://www.youtube.com/*",
+    "https://img.youtube.com/*",
+    "https://i.scdn.co/*",
+    "https://*.mzstatic.com/*",
+    "https://e-cdns-images.dzcdn.net/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https:; img-src 'self' https: data:;"
+  }
+}

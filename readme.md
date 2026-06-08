@@ -1,39 +1,24 @@
 # Ichthus
 
-Reconhecedor de musicas com app desktop e extensao para navegador.
+Reconhecedor de musicas gratuito com app desktop e extensao Chromium. O desktop usa ShazamIO e a extensao usa Vibra/WebAssembly diretamente no navegador.
 
-Ichthus grava alguns segundos de audio, consulta a API da AudD e entrega a musica com capa ou thumbnail, historico local e atalhos para YouTube e Spotify.
+## Instalar
 
-## Recursos
+Requer Python 3.12:
 
-- Reconhecimento via AudD API.
-- App desktop em dark mode com CustomTkinter.
-- Extensao Chromium para Chrome, Edge, Brave e Opera.
-- Historico com imagem, reports e correcoes locais.
-- Links rapidos para YouTube e Spotify.
-- Fallback de capa por iTunes, Deezer e YouTube.
-- Idiomas PT/EN.
-
-## App Desktop
-
-Instale as dependencias:
-
-```bash
-pip install customtkinter Pillow librosa sounddevice soundfile numpy scipy requests python-dotenv
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-Crie um `.env` na raiz:
+## Usar
 
-```env
-AUDD_API_URL=https://api.audd.io/
-AUDD_API_TOKEN=seu_token_audd_aqui
+```powershell
+.\.venv\Scripts\python.exe main.py
 ```
 
-Rode:
-
-```bash
-python main.py
-```
+No app, escolha a entrada de audio e clique em `Ouvir Musica`.
+No Windows, tambem e possivel abrir `iniciar_ichthus.bat`.
 
 ## Extensao
 
@@ -41,15 +26,15 @@ python main.py
 2. Ative `Modo do desenvolvedor`.
 3. Clique em `Carregar sem compactacao`.
 4. Selecione `browser_extension`.
-5. Salve seu token AudD na extensao e clique em `Ouvir Musica`.
+5. Deixe uma aba tocando musica e clique em `Ouvir Musica` na extensao.
 
-## Arquivos
+A extensao reconhece a musica diretamente no navegador e nao depende do app desktop.
+
+## Arquivos principais
 
 ```text
-main.py             inicia o app desktop
-gui.py              interface do Ichthus
-API_audd.py         cliente da AudD API
-browser_extension/  extensao Chromium
-corrections.json    correcoes automaticas
-history.json        historico local
+main.py                       inicia o app desktop
+gui.py                        interface desktop
+API_shazam.py                 reconhecimento com ShazamIO
+browser_extension/            extensao Chromium
 ```

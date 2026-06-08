@@ -1,0 +1,10 @@
+customtkinter
+Pillow
+librosa
+sounddevice
+soundfile
+numpy
+scipy
+requests
+python-dotenv
+shazamio

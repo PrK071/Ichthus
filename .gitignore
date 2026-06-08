@@ -1,15 +1,10 @@
-iloveso2.db
 .env
+.venv/
+python-3.12.10-amd64.exe
 history.json
 correction_reports.json
 .cache
 __pycache__
 songs
-API spotify.py
-API spotify_token.py
-API audd.py
-browser_extension/
-history.json
-correction_reports.json
 corrections.json
 

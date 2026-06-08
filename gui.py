@@ -12,10 +12,9 @@ import sounddevice as sd
 from datetime import datetime
 from pathlib import Path
 from audio import record_audio, SAMPLE_RATE
-from API_audd import (
-    recognize_from_audio as recognize_audd,
-    format_result as format_audd_result,
-    is_configured as is_audd_configured,
+from API_shazam import (
+    recognize_from_audio as recognize_shazam,
+    format_result as format_shazam_result,
 )
 import math
 from PIL import Image, ImageOps, ImageTk
@@ -60,7 +59,7 @@ DEFAULT_CORRECTIONS = [
             "artist": "7 Minutoz",
             "album": "",
         },
-        "note": "AudD costuma retornar esta faixa como Spacetoon TV - Gaara.",
+        "note": "Correcao local conhecida para esta faixa.",
     }
 ]
 #aqui ele só muda o idioma msm
@@ -71,7 +70,7 @@ UI_TEXT = {
         "ready_to_listen": "Pronto para ouvir",
         "ready": "Pronto",
         "listening": "Ouvindo...",
-        "identifying_audd": "Identificando...",
+        "identifying_shazam": "Identificando...",
         "recording_stopped": "Gravação interrompida.",
         "listen_music": "Ouvir Música",
         "stop_recording": "Parar Gravação",
@@ -92,7 +91,6 @@ UI_TEXT = {
         "report": "Reportar",
         "report_saved": "Report salvo.",
         "report_hint": "Adicione uma regra em corrections.json se este resultado tiver artista/título errado.",
-        "audd_config_missing": "AudD: configure AUDD_API_TOKEN no .env para usar.",
         "local_correction": "Correção local aplicada por corrections.json.",
         "no_music": "Música não reconhecida.",
         "error_prefix": "Erro",
@@ -102,7 +100,7 @@ UI_TEXT = {
         "ready_to_listen": "Ready to listen",
         "ready": "Ready",
         "listening": "Listening...",
-        "identifying_audd": "Identifying...",
+        "identifying_shazam": "Identifying...",
         "recording_stopped": "Recording stopped.",
         "listen_music": "Listen",
         "stop_recording": "Stop Recording",
@@ -123,7 +121,6 @@ UI_TEXT = {
         "report": "Report",
         "report_saved": "Report saved.",
         "report_hint": "Add a rule to corrections.json if this result has the wrong artist/title.",
-        "audd_config_missing": "AudD: configure AUDD_API_TOKEN in .env to use recognition.",
         "local_correction": "Local correction applied from corrections.json.",
         "no_music": "Song not recognized.",
         "error_prefix": "Error",
@@ -201,7 +198,7 @@ def apply_known_corrections(result: dict) -> tuple[dict, bool]:
         corrected.update(replacement)
         corrected["corrected"] = True
         corrected["corrected_from"] = (
-            result.get("title") or result.get("artist") or "resultado AudD"
+            result.get("title") or result.get("artist") or "resultado Shazam"
         )
         return corrected, True
 
@@ -278,7 +275,6 @@ class MusicRecognizerApp(ctk.CTk):
         self.minsize(420, 620)
         self.resizable(True, True)
         self.configure(fg_color=BG_ROOT)
-
         self.devices       = sd.query_devices()
         self.input_devices = [
             f"{i}: {d['name']}"
@@ -335,11 +331,7 @@ class MusicRecognizerApp(ctk.CTk):
         corrected: bool = False,
         configured: bool = True,
     ) -> str:
-        if not configured:
-            raw_text = f"{self.tr('audd_config_missing')}\n\n{self.tr('no_music')}"
-            return self._dedupe_lines(raw_text)
-
-        raw_text = format_audd_result(result, self.language, show_source=False)
+        raw_text = format_shazam_result(result, self.language, show_source=False)
         if isinstance(result, dict) and result.get("ok") and corrected:
             raw_text = f"{raw_text}\n{self.tr('local_correction')}"
         if not isinstance(result, dict) or not result.get("ok"):
@@ -1547,7 +1539,7 @@ class MusicRecognizerApp(ctk.CTk):
 
         entry = {
             "when": datetime.now().strftime("%d/%m/%Y %H:%M"),
-            "provider": str(result.get("provider") or "AudD"),
+            "provider": str(result.get("provider") or "Shazam"),
             "title": title,
             "artist": artist or "Desconhecido",
             "album": str(result.get("album") or ""),
@@ -1626,19 +1618,15 @@ class MusicRecognizerApp(ctk.CTk):
 
             result = None
             corrected = False
-            configured = is_audd_configured()
-
-            if configured:
-                self.set_status("identifying_audd")
-                result = recognize_audd(audio, sample_rate=SAMPLE_RATE)
-                if isinstance(result, dict) and result.get("ok"):
-                    result, corrected = apply_known_corrections(result)
-                elif isinstance(result, dict):
-                    final_status_text = str(result.get("error") or self.tr("no_music"))
-                else:
-                    final_status_text = self.tr("no_music")
+            configured = True
+            self.set_status("identifying_shazam")
+            result = recognize_shazam(audio, sample_rate=SAMPLE_RATE)
+            if isinstance(result, dict) and result.get("ok"):
+                result, corrected = apply_known_corrections(result)
+            elif isinstance(result, dict):
+                final_status_text = str(result.get("error") or self.tr("no_music"))
             else:
-                final_status_text = self.tr("audd_config_missing")
+                final_status_text = self.tr("no_music")
 
             clean_text = self._format_recognition_text(result, corrected, configured)
             self._last_result = result
