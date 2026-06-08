@@ -1,5 +1,6 @@
 import asyncio
 import io
+import re
 import warnings
 from typing import Any
 
@@ -43,6 +44,13 @@ def _metadata_value(track: dict[str, Any], *names: str) -> str:
     return ""
 
 
+def _extract_isrc(track: dict[str, Any]) -> str:
+    direct = str(track.get("isrc") or "").strip()
+    if direct:
+        return direct
+    return _metadata_value(track, "isrc")
+
+
 def _extract_cover_url(track: dict[str, Any]) -> str:
     images = track.get("images")
     if not isinstance(images, dict):
@@ -59,6 +67,53 @@ def _extract_youtube_url(track: dict[str, Any]) -> str:
             continue
         if section.get("youtubeurl"):
             return str(section["youtubeurl"])
+    return ""
+
+
+def _clean_spotify_url(value: Any) -> str:
+    text = str(value or "").strip()
+    if text.startswith("spotify:track:"):
+        track_id = text.split("spotify:track:", 1)[1].split("?", 1)[0].strip()
+        return f"https://open.spotify.com/track/{track_id}" if track_id else ""
+    if re.match(r"^https://open\.spotify\.com/(?:intl-[a-z]{2}/)?track/", text, re.I):
+        return text
+    return ""
+
+
+def _extract_spotify_values(track: dict[str, Any]) -> tuple[str, str]:
+    spotify_url = ""
+    spotify_uri = ""
+    hub = track.get("hub")
+    providers = hub.get("providers") if isinstance(hub, dict) else []
+
+    for provider in providers or []:
+        if not isinstance(provider, dict):
+            continue
+        for action in provider.get("actions") or []:
+            if not isinstance(action, dict):
+                continue
+            uri = str(action.get("uri") or "").strip()
+            cleaned = _clean_spotify_url(uri)
+            if cleaned and not spotify_url:
+                spotify_url = cleaned
+            if uri.startswith("spotify:") and not spotify_uri:
+                spotify_uri = uri
+
+    return spotify_url, spotify_uri
+
+
+def _extract_apple_music_url(track: dict[str, Any]) -> str:
+    hub = track.get("hub")
+    options = hub.get("options") if isinstance(hub, dict) else []
+    for option in options or []:
+        if not isinstance(option, dict):
+            continue
+        for action in option.get("actions") or []:
+            if not isinstance(action, dict):
+                continue
+            uri = str(action.get("uri") or "").strip()
+            if uri.startswith("https://music.apple.com/"):
+                return uri
     return ""
 
 
@@ -79,12 +134,15 @@ def normalize_result(data: dict[str, Any] | None) -> dict[str, Any]:
             "raw": data,
         }
 
+    spotify_url, spotify_uri = _extract_spotify_values(track)
+
     return {
         "ok": True,
         "provider": "Shazam",
         "title": str(track.get("title") or "Desconhecido"),
         "artist": str(track.get("subtitle") or "Desconhecido"),
         "album": _metadata_value(track, "album"),
+        "isrc": _extract_isrc(track),
         "release_date": _metadata_value(
             track,
             "released",
@@ -94,6 +152,9 @@ def normalize_result(data: dict[str, Any] | None) -> dict[str, Any]:
         "label": _metadata_value(track, "label", "gravadora"),
         "cover_url": _extract_cover_url(track),
         "youtube_url": _extract_youtube_url(track),
+        "apple_music_url": _extract_apple_music_url(track),
+        "spotify_url": spotify_url,
+        "spotify_uri": spotify_uri,
         "shazam_url": str(track.get("url") or ""),
         "raw": track,
     }

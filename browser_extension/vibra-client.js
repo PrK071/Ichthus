@@ -89,10 +89,56 @@
     return "";
   }
 
+  function isrcValue(track) {
+    return String(track.isrc || metadataValue(track, "isrc") || "").trim();
+  }
+
   function youtubeUrl(track) {
     for (const section of track.sections || []) {
       if (section?.youtubeurl) {
         return String(section.youtubeurl);
+      }
+    }
+    return "";
+  }
+
+  function cleanSpotifyUrl(value) {
+    const text = String(value || "").trim();
+    if (text.startsWith("spotify:track:")) {
+      const trackId = text.split("spotify:track:")[1]?.split("?")[0]?.trim();
+      return trackId ? `https://open.spotify.com/track/${trackId}` : "";
+    }
+    if (/^https:\/\/open\.spotify\.com\/(?:intl-[a-z]{2}\/)?track\//i.test(text)) {
+      return text;
+    }
+    return "";
+  }
+
+  function spotifyValues(track) {
+    let spotifyUrl = "";
+    let spotifyUri = "";
+    for (const provider of track.hub?.providers || []) {
+      for (const action of provider?.actions || []) {
+        const uri = String(action?.uri || "").trim();
+        const cleaned = cleanSpotifyUrl(uri);
+        if (cleaned && !spotifyUrl) {
+          spotifyUrl = cleaned;
+        }
+        if (uri.startsWith("spotify:") && !spotifyUri) {
+          spotifyUri = uri;
+        }
+      }
+    }
+    return { spotifyUrl, spotifyUri };
+  }
+
+  function appleMusicUrl(track) {
+    for (const option of track.hub?.options || []) {
+      for (const action of option?.actions || []) {
+        const uri = String(action?.uri || "").trim();
+        if (uri.startsWith("https://music.apple.com/")) {
+          return uri;
+        }
       }
     }
     return "";
@@ -110,16 +156,21 @@
     }
 
     const images = track.images || {};
+    const spotify = spotifyValues(track);
     return {
       ok: true,
       provider: "Shazam",
       title: String(track.title || "Unknown"),
       artist: String(track.subtitle || "Unknown"),
       album: metadataValue(track, "album"),
+      isrc: isrcValue(track),
       release_date: metadataValue(track, "released", "release date", "lancamento"),
       label: metadataValue(track, "label", "gravadora"),
       cover_url: String(images.coverarthq || images.coverart || images.background || ""),
       youtube_url: youtubeUrl(track),
+      apple_music_url: appleMusicUrl(track),
+      spotify_url: spotify.spotifyUrl,
+      spotify_uri: spotify.spotifyUri,
       shazam_url: String(track.url || ""),
       raw: track
     };

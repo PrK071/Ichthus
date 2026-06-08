@@ -6,6 +6,8 @@ const STORAGE_DEFAULTS = {
 
 const MAX_HISTORY = 50;
 const RECORD_MS = 8500;
+const youtubeVideoCache = new Map();
+const songlinkSpotifyCache = new Map();
 
 const DEFAULT_CORRECTIONS = [
   {
@@ -351,8 +353,11 @@ async function showRecognition(result) {
   setStatus(tr("recognized"));
   els.songTitle.textContent = result.title || tr("unknown");
   els.songArtist.textContent = result.artist || tr("unknown");
+  els.youtubeBtn.disabled = !getDirectYoutubeUrl(result);
+  els.spotifyBtn.disabled = !state.lastQuery;
   els.platformLinks.classList.remove("hidden");
   els.resultCard.classList.remove("hidden");
+  resolvePlatformLinks(result, query);
   const imageUrl = await setCover(result, query);
   await addHistory(result, query, imageUrl);
 }
@@ -400,7 +405,7 @@ async function findCoverUrl(result, query) {
     }
   }
 
-  const youtubeUrl = await findYoutubeThumbnail(queries[0] || query);
+  const youtubeUrl = (await findYoutubeVideo(queries[0] || query)).thumbnail_url;
   return youtubeUrl && await canLoadImage(youtubeUrl) ? youtubeUrl : "";
 }
 
@@ -482,16 +487,160 @@ async function findDeezerArtwork(query) {
   }
 }
 
-async function findYoutubeThumbnail(query) {
+async function findYoutubeVideo(query) {
+  const key = normalizeText(query);
+  if (!key) {
+    return { video_url: "", thumbnail_url: "" };
+  }
+  if (youtubeVideoCache.has(key)) {
+    return youtubeVideoCache.get(key);
+  }
+
   try {
     const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-    const response = await fetch(url);
-    const html = await response.text();
-    const match = html.match(/"videoId":"([A-Za-z0-9_-]{11})"/);
-    return match ? `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg` : "";
+    let response = await fetchWithTimeout(url, {}, 4200);
+    let videoId = await readFirstYoutubeVideoId(response);
+    if (!videoId) {
+      response = await fetchWithTimeout(url, {}, 7000);
+      videoId = extractYoutubeVideoId(await response.text());
+    }
+    const video = videoId
+      ? {
+          video_url: `https://www.youtube.com/watch?v=${videoId}`,
+          thumbnail_url: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+        }
+      : { video_url: "", thumbnail_url: "" };
+    youtubeVideoCache.set(key, video);
+    return video;
   } catch (_error) {
+    return { video_url: "", thumbnail_url: "" };
+  }
+}
+
+async function readFirstYoutubeVideoId(response) {
+  if (!response.body?.getReader) {
+    const html = await response.text();
+    return extractYoutubeVideoId(html);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let total = 0;
+
+  while (total < 1800000) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    total += value.byteLength;
+    buffer += decoder.decode(value, { stream: true });
+    const videoId = extractYoutubeVideoId(buffer);
+    if (videoId) {
+      reader.cancel().catch(() => {});
+      return videoId;
+    }
+    buffer = buffer.slice(-12000);
+  }
+
+  reader.cancel().catch(() => {});
+  return "";
+}
+
+function extractYoutubeVideoId(text) {
+  const patterns = [
+    /"videoRenderer"\s*:\s*\{\s*"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"/,
+    /"watchEndpoint"\s*:\s*\{\s*"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"/,
+    /"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"/,
+    /\/watch\?v=([A-Za-z0-9_-]{11})/
+  ];
+  for (const pattern of patterns) {
+    const match = String(text || "").match(pattern);
+    if (match) {
+      return match[1];
+    }
+  }
+  return "";
+}
+
+async function enrichYoutubeUrl(result, query) {
+  if (getDirectYoutubeUrl(result)) {
+    return;
+  }
+  const video = await findYoutubeVideo(query);
+  if (video.video_url) {
+    result.youtube_url = video.video_url;
+  }
+}
+
+async function enrichSpotifyUrl(result) {
+  if (getDirectSpotifyUrl(result)) {
+    return;
+  }
+
+  const candidates = [
+    result.apple_music_url,
+    result.youtube_url,
+    result.shazam_url
+  ].filter(Boolean);
+
+  for (const sourceUrl of candidates) {
+    const spotifyUrl = await findSonglinkSpotifyUrl(sourceUrl);
+    if (spotifyUrl) {
+      result.spotify_url = spotifyUrl;
+      return;
+    }
+  }
+}
+
+async function resolvePlatformLinks(result, query) {
+  try {
+    await enrichYoutubeUrl(result, query);
+    await enrichSpotifyUrl(result);
+    if (state.lastResult === result) {
+      els.youtubeBtn.disabled = !getDirectYoutubeUrl(result);
+      els.spotifyBtn.disabled = !state.lastQuery;
+    }
+  } catch (_error) {
+    // Link resolution is optional; recognition must stay responsive.
+  }
+}
+
+async function findSonglinkSpotifyUrl(sourceUrl) {
+  const key = String(sourceUrl || "").trim();
+  if (!key) {
     return "";
   }
+  if (songlinkSpotifyCache.has(key)) {
+    return songlinkSpotifyCache.get(key);
+  }
+
+  try {
+    const url = new URL("https://api.song.link/v1-alpha.1/links");
+    url.search = new URLSearchParams({
+      url: key,
+      userCountry: "BR"
+    }).toString();
+    const response = await fetchWithTimeout(url, {}, 4500);
+    if (!response.ok) {
+      songlinkSpotifyCache.set(key, "");
+      return "";
+    }
+    const data = await response.json();
+    const spotifyUrl = cleanSpotifyUrl(data.linksByPlatform?.spotify?.url);
+    songlinkSpotifyCache.set(key, spotifyUrl);
+    return spotifyUrl;
+  } catch (_error) {
+    songlinkSpotifyCache.set(key, "");
+    return "";
+  }
+}
+
+function fetchWithTimeout(url, options = {}, timeoutMs = 4500) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timer));
 }
 
 async function addHistory(result, query, imageUrl = "") {
@@ -508,6 +657,9 @@ async function addHistory(result, query, imageUrl = "") {
     album: result.album || "",
     release_date: result.release_date || "",
     cover_url: result.cover_url || "",
+    youtube_url: result.youtube_url || "",
+    apple_music_url: result.apple_music_url || "",
+    spotify_url: result.spotify_url || "",
     image_url: imageUrl || result.cover_url || "",
     query,
     corrected: Boolean(result.corrected),
@@ -622,6 +774,8 @@ function clearResult(resetStatus = true) {
   els.coverBox.innerHTML = "<span>♪</span>";
   els.songTitle.textContent = "-";
   els.songArtist.textContent = "-";
+  els.youtubeBtn.disabled = true;
+  els.spotifyBtn.disabled = true;
   if (resetStatus) {
     setStatus(state.engineReady ? tr("ready") : tr("loading_engine"));
   }
@@ -659,11 +813,41 @@ function openPlatform(platform) {
   if (!state.lastQuery) {
     return;
   }
-  const encoded = encodeURIComponent(state.lastQuery);
-  const url = platform === "spotify"
-    ? `https://open.spotify.com/search/${encoded}`
-    : `https://www.youtube.com/results?search_query=${encoded}`;
-  chrome.tabs.create({ url });
+  if (platform === "youtube") {
+    const directYoutubeUrl = getDirectYoutubeUrl(state.lastResult);
+    if (directYoutubeUrl) {
+      chrome.tabs.create({ url: directYoutubeUrl });
+    }
+    return;
+  }
+  const directSpotifyUrl = getDirectSpotifyUrl(state.lastResult);
+  chrome.tabs.create({
+    url: directSpotifyUrl || `https://open.spotify.com/search/${encodeURIComponent(state.lastQuery)}`
+  });
+}
+
+function getDirectYoutubeUrl(result) {
+  const url = String(result?.youtube_url || "").trim();
+  if (/^https?:\/\/(?:www\.|m\.|music\.)?(?:youtube\.com|youtu\.be)\//i.test(url)) {
+    return url;
+  }
+  return "";
+}
+
+function getDirectSpotifyUrl(result) {
+  return cleanSpotifyUrl(result?.spotify_url) || cleanSpotifyUrl(result?.spotify_uri);
+}
+
+function cleanSpotifyUrl(value) {
+  const text = String(value || "").trim();
+  if (/^https:\/\/open\.spotify\.com\/(?:intl-[a-z]{2}\/)?track\//i.test(text)) {
+    return text;
+  }
+  if (text.startsWith("spotify:track:")) {
+    const trackId = text.split("spotify:track:")[1]?.split("?")[0]?.trim();
+    return trackId ? `https://open.spotify.com/track/${trackId}` : "";
+  }
+  return "";
 }
 
 function normalizeText(value) {

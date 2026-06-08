@@ -283,6 +283,8 @@ class MusicRecognizerApp(ctk.CTk):
         ]
 
         self._youtube_query = ""
+        self._youtube_url = ""
+        self._spotify_url = ""
         self.language = "pt"
         self._status_key = "ready_to_listen"
         self._result_mode = "placeholder"
@@ -295,6 +297,8 @@ class MusicRecognizerApp(ctk.CTk):
         self._cover_animation_job = None
         self._cover_content_visible = False
         self._cover_url_cache = {}
+        self._youtube_video_cache = {}
+        self._songlink_spotify_cache = {}
         self._history_thumbnail_cache = {}
         self._history_thumbnail_loading = set()
         self._history_thumbnail_failures = set()
@@ -451,24 +455,71 @@ class MusicRecognizerApp(ctk.CTk):
         return ""
 
     def _find_youtube_thumbnail_url(self, query: str) -> str:
+        video_id = self._find_youtube_video_id(query)
+        if not video_id:
+            return ""
+        return f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+
+    def _find_youtube_video_url(self, query: str) -> str:
+        video_id = self._find_youtube_video_id(query)
+        if not video_id:
+            return ""
+        return f"https://www.youtube.com/watch?v={video_id}"
+
+    def _find_youtube_video_id(self, query: str) -> str:
         if not query:
             return ""
+
+        cache_key = _normalize_text(query)
+        if cache_key in self._youtube_video_cache:
+            return self._youtube_video_cache[cache_key]
 
         url = "https://www.youtube.com/results?search_query=" + urllib.parse.quote(query)
         try:
             response = requests.get(
                 url,
-                timeout=4,
+                timeout=(2, 5),
                 headers={"User-Agent": "Mozilla/5.0"},
+                stream=True,
             )
             response.raise_for_status()
+            text = ""
+            total = 0
+            for chunk in response.iter_content(chunk_size=8192, decode_unicode=True):
+                if not chunk:
+                    continue
+                if isinstance(chunk, bytes):
+                    chunk = chunk.decode("utf-8", errors="ignore")
+                total += len(chunk)
+                text += chunk
+                video_id = self._extract_youtube_video_id(text)
+                if video_id:
+                    self._youtube_video_cache[cache_key] = video_id
+                    response.close()
+                    return self._youtube_video_cache[cache_key]
+                if total >= 1_800_000:
+                    break
+                text = text[-12000:] if len(text) > 12000 else text
+            response.close()
         except requests.exceptions.RequestException:
+            self._youtube_video_cache[cache_key] = ""
             return ""
 
-        match = re.search(r'"videoId":"([A-Za-z0-9_-]{11})"', response.text)
-        if not match:
-            return ""
-        return f"https://img.youtube.com/vi/{match.group(1)}/hqdefault.jpg"
+        self._youtube_video_cache[cache_key] = ""
+        return ""
+
+    def _extract_youtube_video_id(self, text: str) -> str:
+        patterns = (
+            r'"videoRenderer"\s*:\s*\{\s*"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"',
+            r'"watchEndpoint"\s*:\s*\{\s*"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"',
+            r'"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"',
+            r"/watch\?v=([A-Za-z0-9_-]{11})",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, text or "")
+            if match:
+                return match.group(1)
+        return ""
 
     def _cover_url_candidates(self, result: dict, query: str) -> list[str]:
         urls = []
@@ -1060,14 +1111,98 @@ class MusicRecognizerApp(ctk.CTk):
         self._build_history_sidebar()
 
     def open_youtube(self):
-        if self._youtube_query:
-            url = "https://www.youtube.com/results?search_query=" + urllib.parse.quote(self._youtube_query)
-            webbrowser.open(url)
+        if not self._youtube_url:
+            return
+        webbrowser.open(self._youtube_url)
 
     def open_spotify(self):
-        if self._youtube_query:
-            url = "https://open.spotify.com/search/" + urllib.parse.quote(self._youtube_query)
-            webbrowser.open(url)
+        if not self._youtube_query:
+            return
+        url = self._spotify_url or (
+            "https://open.spotify.com/search/" + urllib.parse.quote(self._youtube_query)
+        )
+        webbrowser.open(url)
+
+    def _clean_youtube_url(self, url: str) -> str:
+        value = str(url or "").strip()
+        if re.match(r"^https?://(?:www\.|m\.|music\.)?(?:youtube\.com|youtu\.be)/", value, re.I):
+            return value
+        return ""
+
+    def _clean_spotify_url(self, url: str) -> str:
+        value = str(url or "").strip()
+        if value.startswith("spotify:track:"):
+            track_id = value.split("spotify:track:", 1)[1].split("?", 1)[0].strip()
+            return f"https://open.spotify.com/track/{track_id}" if track_id else ""
+        if re.match(r"^https://open\.spotify\.com/(?:intl-[a-z]{2}/)?track/", value, re.I):
+            return value
+        return ""
+
+    def _resolve_spotify_url(self, result: dict) -> str:
+        direct_url = self._clean_spotify_url(result.get("spotify_url"))
+        if direct_url:
+            return direct_url
+
+        direct_uri = self._clean_spotify_url(result.get("spotify_uri"))
+        if direct_uri:
+            return direct_uri
+
+        for source_url in (
+            result.get("apple_music_url"),
+            result.get("youtube_url"),
+            result.get("shazam_url"),
+        ):
+            spotify_url = self._find_songlink_spotify_url(str(source_url or ""))
+            if spotify_url:
+                return spotify_url
+        return ""
+
+    def _resolve_platform_links_async(self, result: dict, query: str):
+        youtube_url = self._clean_youtube_url(result.get("youtube_url")) or self._find_youtube_video_url(query)
+        if youtube_url and not result.get("youtube_url"):
+            result["youtube_url"] = youtube_url
+
+        spotify_url = self._resolve_spotify_url(result)
+        if spotify_url:
+            result["spotify_url"] = spotify_url
+
+        def apply_links():
+            if self._last_result is not result:
+                return
+            self._youtube_url = youtube_url
+            self._spotify_url = spotify_url
+            self.btn_youtube.configure(state="normal" if self._youtube_url else "disabled")
+            self.btn_spotify.configure(state="normal" if query else "disabled")
+
+        self.after(0, apply_links)
+
+    def _find_songlink_spotify_url(self, source_url: str) -> str:
+        source_url = str(source_url or "").strip()
+        if not source_url:
+            return ""
+        if source_url in self._songlink_spotify_cache:
+            return self._songlink_spotify_cache[source_url]
+
+        try:
+            response = requests.get(
+                "https://api.song.link/v1-alpha.1/links",
+                params={"url": source_url, "userCountry": "BR"},
+                timeout=6,
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            response.raise_for_status()
+            data = response.json()
+        except (requests.exceptions.RequestException, ValueError):
+            self._songlink_spotify_cache[source_url] = ""
+            return ""
+
+        links = data.get("linksByPlatform") if isinstance(data, dict) else {}
+        spotify = links.get("spotify") if isinstance(links, dict) else {}
+        spotify_url = self._clean_spotify_url(
+            spotify.get("url") if isinstance(spotify, dict) else ""
+        )
+        self._songlink_spotify_cache[source_url] = spotify_url
+        return spotify_url
 
     def load_history(self):
         if not HISTORY_FILE.exists():
@@ -1544,6 +1679,9 @@ class MusicRecognizerApp(ctk.CTk):
             "artist": artist or "Desconhecido",
             "album": str(result.get("album") or ""),
             "cover_url": str(result.get("cover_url") or ""),
+            "youtube_url": str(result.get("youtube_url") or ""),
+            "apple_music_url": str(result.get("apple_music_url") or ""),
+            "spotify_url": str(result.get("spotify_url") or ""),
             "image_url": "" if result.get("corrected") else str(result.get("cover_url") or ""),
             "query": " ".join(
                 part for part in (title, artist, str(result.get("album") or "")) if part
@@ -1580,6 +1718,8 @@ class MusicRecognizerApp(ctk.CTk):
         self._set_result_text(self.tr("placeholder"))
         self.clear_cover()
         self._youtube_query = ""
+        self._youtube_url = ""
+        self._spotify_url = ""
         self.btn_youtube.configure(
             state="disabled",
             fg_color="transparent",
@@ -1644,11 +1784,23 @@ class MusicRecognizerApp(ctk.CTk):
                         query_parts.append(str(val).strip())
 
             self._youtube_query = " ".join(query_parts)
+            self._youtube_url = self._clean_youtube_url(
+                result.get("youtube_url") if isinstance(result, dict) else ""
+            )
+            if isinstance(result, dict) and self._youtube_url and not result.get("youtube_url"):
+                result["youtube_url"] = self._youtube_url
+            self._spotify_url = self._clean_spotify_url(
+                result.get("spotify_url") if isinstance(result, dict) else ""
+            ) or self._clean_spotify_url(
+                result.get("spotify_uri") if isinstance(result, dict) else ""
+            )
+            if isinstance(result, dict) and self._spotify_url:
+                result["spotify_url"] = self._spotify_url
             if self._youtube_query:
                 self.add_history_entry(result)
                 self._load_cover_async(result, self._youtube_query)
                 self.btn_youtube.configure(
-                    state="normal",
+                    state="normal" if self._youtube_url else "disabled",
                     fg_color="transparent",
                     border_width=0,
                     image=self._icon_yt,
@@ -1659,6 +1811,12 @@ class MusicRecognizerApp(ctk.CTk):
                     border_width=0,
                     image=self._icon_spotify,
                 )
+                if isinstance(result, dict):
+                    threading.Thread(
+                        target=self._resolve_platform_links_async,
+                        args=(result, self._youtube_query),
+                        daemon=True,
+                    ).start()
             else:
                 self.after(0, self.clear_cover)
                 if not final_status_text:
