@@ -17,7 +17,7 @@ from API_shazam import (
     format_result as format_shazam_result,
 )
 import math
-from PIL import Image, ImageOps, ImageTk
+from PIL import Image, ImageDraw, ImageOps, ImageTk
 
 
 
@@ -67,13 +67,13 @@ LANGUAGE_ORDER = ("pt", "en")
 UI_TEXT = {
     "pt": {
         "language_button": "EN",
-        "ready_to_listen": "Pronto para ouvir",
+        "ready_to_listen": "",
         "ready": "Pronto",
         "listening": "Ouvindo...",
         "identifying_shazam": "Identificando...",
         "recording_stopped": "Gravação interrompida.",
         "listen_music": "Ouvir Música",
-        "stop_recording": "Parar Gravação",
+        "stop_recording": "Pausar",
         "microphone": "MICROFONE",
         "result": "RESULTADO",
         "placeholder": "O resultado aparecerá aqui...",
@@ -97,13 +97,13 @@ UI_TEXT = {
     },
     "en": {
         "language_button": "PT",
-        "ready_to_listen": "Ready to listen",
+        "ready_to_listen": "",
         "ready": "Ready",
         "listening": "Listening...",
         "identifying_shazam": "Identifying...",
         "recording_stopped": "Recording stopped.",
         "listen_music": "Listen",
-        "stop_recording": "Stop Recording",
+        "stop_recording": "Pause",
         "microphone": "MICROPHONE",
         "result": "RESULT",
         "placeholder": "The result will appear here...",
@@ -130,6 +130,80 @@ UI_TEXT = {
 
 def _load_icon(filename: str, size: tuple[int, int]) -> ctk.CTkImage:
     image = Image.open(ASSETS_DIR / filename).convert("RGBA")
+    return ctk.CTkImage(light_image=image, dark_image=image, size=size)
+
+
+def _hex_to_rgba(color: str, alpha: int = 255) -> tuple[int, int, int, int]:
+    value = str(color or "#FFFFFF").lstrip("#")
+    return (
+        int(value[0:2], 16),
+        int(value[2:4], 16),
+        int(value[4:6], 16),
+        alpha,
+    )
+
+
+def _make_microphone_icon(
+    size: tuple[int, int] = (30, 30),
+    color: str = TEXT_PRIMARY,
+) -> ctk.CTkImage:
+    scale = 4
+    width, height = size[0] * scale, size[1] * scale
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    ink = _hex_to_rgba(color)
+    line_w = max(4, int(width * 0.065))
+
+    draw.rounded_rectangle(
+        (width * 0.36, height * 0.10, width * 0.64, height * 0.57),
+        radius=int(width * 0.14),
+        fill=ink,
+    )
+    draw.arc(
+        (width * 0.22, height * 0.33, width * 0.78, height * 0.78),
+        0,
+        180,
+        fill=ink,
+        width=line_w,
+    )
+    draw.line(
+        (width * 0.50, height * 0.78, width * 0.50, height * 0.90),
+        fill=ink,
+        width=line_w,
+    )
+    draw.line(
+        (width * 0.34, height * 0.90, width * 0.66, height * 0.90),
+        fill=ink,
+        width=line_w,
+    )
+
+    image = image.resize(size, Image.LANCZOS)
+    return ctk.CTkImage(light_image=image, dark_image=image, size=size)
+
+
+def _make_pause_icon(
+    size: tuple[int, int] = (25, 25),
+    color: str = TEXT_PRIMARY,
+) -> ctk.CTkImage:
+    scale = 4
+    width, height = size[0] * scale, size[1] * scale
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    ink = _hex_to_rgba(color)
+    radius = max(3, int(width * 0.05))
+
+    draw.rounded_rectangle(
+        (width * 0.30, height * 0.20, width * 0.43, height * 0.80),
+        radius=radius,
+        fill=ink,
+    )
+    draw.rounded_rectangle(
+        (width * 0.57, height * 0.20, width * 0.70, height * 0.80),
+        radius=radius,
+        fill=ink,
+    )
+
+    image = image.resize(size, Image.LANCZOS)
     return ctk.CTkImage(light_image=image, dark_image=image, size=size)
 
 
@@ -207,10 +281,15 @@ def apply_known_corrections(result: dict) -> tuple[dict, bool]:
 
 class AnimatedBars(ctk.CTkCanvas):
 
-    BAR_COUNT = 5
-    BAR_W     = 6
+    IDLE_HEIGHTS = (
+        3, 4, 5, 6, 7, 8, 10, 18, 22, 12, 30,
+        42, 26, 14, 20, 16, 32, 52, 38, 24, 14,
+        20, 16, 32, 42, 26, 14, 22, 16, 12, 8, 6, 4,
+    )
+    BAR_COUNT = len(IDLE_HEIGHTS)
+    BAR_W     = 4
     BAR_GAP   = 5
-    HEIGHT    = 36
+    HEIGHT    = 96
 
     def __init__(self, master, **kw):
         total_w = self.BAR_COUNT * self.BAR_W + (self.BAR_COUNT - 1) * self.BAR_GAP
@@ -218,7 +297,7 @@ class AnimatedBars(ctk.CTkCanvas):
             master,
             width=total_w,
             height=self.HEIGHT,
-            bg=BG_CARD,
+            bg=BG_CARD2,
             highlightthickness=0,
             **kw,
         )
@@ -227,32 +306,42 @@ class AnimatedBars(ctk.CTkCanvas):
         self._bar_ids  = []
         self._draw_idle()
 
+    def _draw_bar(self, index: int, height: int, color: str):
+        x = index * (self.BAR_W + self.BAR_GAP) + self.BAR_W / 2
+        y0 = (self.HEIGHT - height) / 2
+        y1 = (self.HEIGHT + height) / 2
+        self.create_line(
+            x,
+            y0,
+            x,
+            y1,
+            fill=color,
+            width=self.BAR_W,
+            capstyle=tk.ROUND,
+        )
+
     def _draw_idle(self):
         self.delete("all")
-        cx = (self.BAR_COUNT * self.BAR_W + (self.BAR_COUNT - 1) * self.BAR_GAP) / 2
-        for i in range(self.BAR_COUNT):
-            x0 = i * (self.BAR_W + self.BAR_GAP)
-            x1 = x0 + self.BAR_W
-            h  = 8
-            y0 = (self.HEIGHT - h) // 2
-            y1 = y0 + h
-            self.create_rectangle(x0, y0, x1, y1, fill=TEXT_MUTED, outline="", width=0)
+        for index, height in enumerate(self.IDLE_HEIGHTS):
+            color = ACCENT_LIGHT if index % 3 else ACCENT
+            self._draw_bar(index, height, color)
 
     def _animate(self):
         if not self._running:
             return
         self.delete("all")
         self._frame += 1
-        for i in range(self.BAR_COUNT):
-            phase = self._frame / 6 + i * 0.8
-            h     = int(10 + 14 * abs(math.sin(phase)))
-            x0    = i * (self.BAR_W + self.BAR_GAP)
-            x1    = x0 + self.BAR_W
-            y0    = (self.HEIGHT - h) // 2
-            y1    = y0 + h
-            color = ACCENT_LIGHT if i % 2 == 0 else ACCENT
-            self.create_rectangle(x0, y0, x1, y1, fill=color, outline="", width=0)
-        self.after(60, self._animate)
+        center = (self.BAR_COUNT - 1) / 2
+        for index, base_height in enumerate(self.IDLE_HEIGHTS):
+            distance = abs(index - center) / center
+            envelope = 0.45 + (0.85 * (1 - distance))
+            pulse = abs(math.sin(self._frame / 4.6 + index * 0.55))
+            shimmer = abs(math.sin(self._frame / 7.4 + index * 1.3)) * 0.22
+            height = int(base_height + (18 + 28 * envelope) * (0.55 * pulse + shimmer))
+            height = max(5, min(self.HEIGHT - 12, height))
+            color = ACCENT_LIGHT if pulse > 0.55 else ACCENT
+            self._draw_bar(index, height, color)
+        self.after(48, self._animate)
 
     def start(self):
         if not self._running:
@@ -809,9 +898,9 @@ class MusicRecognizerApp(ctk.CTk):
         if hasattr(self, "btn_language"):
             self.btn_language.configure(text=self.tr("language_button"))
         if hasattr(self, "btn_recognize"):
-            self.btn_recognize.configure(text=f"  {self.tr('listen_music')}")
+            self.btn_recognize.configure(text="", image=self._icon_mic)
         if hasattr(self, "btn_stop"):
-            self.btn_stop.configure(text=f"  {self.tr('stop_recording')}")
+            self.btn_stop.configure(text="")
         if hasattr(self, "label_microphone"):
             self.label_microphone.configure(text=self.tr("microphone"))
         if hasattr(self, "label_result"):
@@ -841,63 +930,71 @@ class MusicRecognizerApp(ctk.CTk):
         card.pack(side="left", fill="both", expand=True, padx=18, pady=22)
 
         header = ctk.CTkFrame(card, fg_color="transparent")
-        header.pack(fill="x", padx=24, pady=(24, 4))
+        header.pack(fill="x", padx=28, pady=(26, 8))
 
         ctk.CTkLabel(
             header,
             text="♪",
-            font=(FONT_FAMILY, 22, "bold"),
+            font=(FONT_FAMILY, 30, "bold"),
             text_color=ACCENT_LIGHT,
         ).pack(side="left")
 
         ctk.CTkLabel(
             header,
             text="Ichthus",
-            font=(FONT_FAMILY, 20, "bold"),
+            font=(FONT_FAMILY, 24, "bold"),
             text_color=TEXT_PRIMARY,
-        ).pack(side="left", padx=(8, 0))
+        ).pack(side="left", padx=(10, 0))
 
         self._dot = ctk.CTkLabel(
-            header, text="●", font=(FONT_FAMILY, 10), text_color=TEXT_MUTED
+            header, text="", font=(FONT_FAMILY, 10), text_color=TEXT_MUTED
         )
         self.btn_language = ctk.CTkButton(
             header,
             text=self.tr("language_button"),
-            font=(FONT_FAMILY, 11, "bold"),
-            width=42,
-            height=28,
-            corner_radius=9,
+            font=(FONT_FAMILY, 13, "bold"),
+            width=52,
+            height=38,
+            corner_radius=14,
             fg_color=BG_FIELD,
-            hover_color=GRAY_HOVER,
-            border_color=BORDER,
-            border_width=1,
+            hover_color=BG_CARD2,
+            border_color=ACCENT,
+            border_width=2,
             text_color=TEXT_PRIMARY,
             command=self.toggle_language,
         )
         self.btn_language.pack(side="right", padx=(8, 0))
-        self._dot.pack(side="right")
 
-        ctk.CTkFrame(card, height=1, fg_color=BORDER).pack(
-            fill="x", padx=24, pady=(12, 0)
+        listen_panel = ctk.CTkFrame(
+            card,
+            fg_color=BG_CARD2,
+            corner_radius=18,
+            border_color=BORDER,
+            border_width=1,
         )
+        listen_panel.pack(fill="x", padx=24, pady=(18, 12))
 
-        bars_row = ctk.CTkFrame(card, fg_color="transparent")
-        bars_row.pack(pady=(20, 4))
+        bars_row = ctk.CTkFrame(listen_panel, fg_color="transparent")
+        bars_row.pack(fill="x", padx=18, pady=(12, 14))
 
         self._bars = AnimatedBars(bars_row)
-        self._bars.pack(side="left", padx=(0, 12))
+        self._bars.pack(anchor="center")
 
         self._status_label = ctk.CTkLabel(
             bars_row,
-            text=self.tr("ready_to_listen"),
+            text="",
             font=(FONT_FAMILY, 13),
             text_color=TEXT_MUTED,
         )
-        self._status_label.pack(side="left")
+
+        self._icon_mic = _make_microphone_icon((30, 30), "#FFFFFF")
+        self._icon_pause = _make_pause_icon((25, 25), TEXT_MUTED)
+        self._icon_pause_active = _make_pause_icon((25, 25), "#FFFFFF")
 
         self.btn_recognize = ctk.CTkButton(
-            card,
-            text=f"  {self.tr('listen_music')}",
+            listen_panel,
+            text="",
+            image=self._icon_mic,
             font=(FONT_FAMILY, 15, "bold"),
             height=54,
             corner_radius=16,
@@ -906,29 +1003,30 @@ class MusicRecognizerApp(ctk.CTk):
             text_color=TEXT_PRIMARY,
             command=self.start_recognition_thread,
         )
-        self.btn_recognize.pack(fill="x", padx=24, pady=(16, 6))
+        self.btn_recognize.pack(fill="x", padx=18, pady=(0, 8))
 
         self.btn_stop = ctk.CTkButton(
-            card,
-            text=f"  {self.tr('stop_recording')}",
+            listen_panel,
+            text="",
+            image=self._icon_pause,
             font=(FONT_FAMILY, 13),
-            height=40,
+            height=46,
             corner_radius=12,
-            fg_color=GRAY_BTN,
-            hover_color=RED_HOVER,
+            fg_color=BG_FIELD,
+            hover_color=GRAY_HOVER,
+            border_color=TEXT_MUTED,
+            border_width=1,
             text_color=TEXT_MUTED,
             state="disabled",
             command=self.stop_recognition,
         )
-        self.btn_stop.pack(fill="x", padx=24, pady=(0, 14))
-        ctk.CTkFrame(card, height=1, fg_color=BORDER).pack(fill="x", padx=24)
+        self.btn_stop.pack(fill="x", padx=18, pady=(0, 18))
         self.label_microphone = ctk.CTkLabel(
             card,
             text=self.tr("microphone"),
             font=(FONT_FAMILY, 10, "bold"),
             text_color=TEXT_MUTED,
         )
-        self.label_microphone.pack(anchor="w", padx=28, pady=(16, 4))
 
         self.device_selector = ctk.CTkComboBox(
             card,
@@ -946,15 +1044,9 @@ class MusicRecognizerApp(ctk.CTk):
             dropdown_text_color=TEXT_PRIMARY,
             font=(FONT_FAMILY, 12),
         )
-        self.device_selector.pack(fill="x", padx=24)
         if self.input_devices:
             self.device_selector.set(self.input_devices[0])
         self.device_selector._entry.configure(state="readonly", cursor="arrow")
-
-        ctk.CTkFrame(card, height=1, fg_color=BORDER).pack(
-            fill="x", padx=24, pady=(16, 0)
-        )
-
 
         self.label_result = ctk.CTkLabel(
             card,
@@ -962,7 +1054,7 @@ class MusicRecognizerApp(ctk.CTk):
             font=(FONT_FAMILY, 10, "bold"),
             text_color=TEXT_MUTED,
         )
-        self.label_result.pack(anchor="w", padx=28, pady=(16, 4))
+        self.label_result.pack(anchor="w", padx=28, pady=(10, 8))
 
         self.cover_slot = ctk.CTkFrame(
             card,
@@ -1074,7 +1166,6 @@ class MusicRecognizerApp(ctk.CTk):
         )
         self.cover_frame.place_forget()
 
-        #histórico e limpeza ficam fora do card da música; plataformas ficam dentro dele.
         self.stream_row = ctk.CTkFrame(card, fg_color="transparent")
         self.stream_row.pack(fill="x", padx=24, pady=(0, 6))
 
@@ -1111,17 +1202,19 @@ class MusicRecognizerApp(ctk.CTk):
         self._build_history_sidebar()
 
     def open_youtube(self):
-        if not self._youtube_url:
+        if not self._youtube_query:
             return
-        webbrowser.open(self._youtube_url)
+        webbrowser.open(
+            "https://www.youtube.com/results?search_query="
+            + urllib.parse.quote(self._youtube_query)
+        )
 
     def open_spotify(self):
         if not self._youtube_query:
             return
-        url = self._spotify_url or (
+        webbrowser.open(
             "https://open.spotify.com/search/" + urllib.parse.quote(self._youtube_query)
         )
-        webbrowser.open(url)
 
     def _clean_youtube_url(self, url: str) -> str:
         value = str(url or "").strip()
@@ -1171,7 +1264,7 @@ class MusicRecognizerApp(ctk.CTk):
                 return
             self._youtube_url = youtube_url
             self._spotify_url = spotify_url
-            self.btn_youtube.configure(state="normal" if self._youtube_url else "disabled")
+            self.btn_youtube.configure(state="normal" if query else "disabled")
             self.btn_spotify.configure(state="normal" if query else "disabled")
 
         self.after(0, apply_links)
@@ -1737,7 +1830,11 @@ class MusicRecognizerApp(ctk.CTk):
         self.btn_recognize.configure(state="disabled")
         self.btn_stop.configure(
             state="normal",
-            fg_color=RED,
+            fg_color=BG_FIELD,
+            hover_color=GRAY_HOVER,
+            border_color="#BCBEDA",
+            border_width=1,
+            image=self._icon_pause_active,
             text_color=TEXT_PRIMARY,
         )
         self.clear_cover()
@@ -1800,7 +1897,7 @@ class MusicRecognizerApp(ctk.CTk):
                 self.add_history_entry(result)
                 self._load_cover_async(result, self._youtube_query)
                 self.btn_youtube.configure(
-                    state="normal" if self._youtube_url else "disabled",
+                    state="normal",
                     fg_color="transparent",
                     border_width=0,
                     image=self._icon_yt,
@@ -1839,7 +1936,11 @@ class MusicRecognizerApp(ctk.CTk):
             self.btn_recognize.configure(state="normal")
             self.btn_stop.configure(
                 state="disabled",
-                fg_color=GRAY_BTN,
+                fg_color=BG_FIELD,
+                hover_color=GRAY_HOVER,
+                border_color=TEXT_MUTED,
+                border_width=1,
+                image=self._icon_pause,
                 text_color=TEXT_MUTED,
             )
 
@@ -1851,7 +1952,11 @@ class MusicRecognizerApp(ctk.CTk):
         self.btn_recognize.configure(state="normal")
         self.btn_stop.configure(
             state="disabled",
-            fg_color=GRAY_BTN,
+            fg_color=BG_FIELD,
+            hover_color=GRAY_HOVER,
+            border_color=TEXT_MUTED,
+            border_width=1,
+            image=self._icon_pause,
             text_color=TEXT_MUTED,
         )
 

@@ -18,19 +18,37 @@
         </div>
       </header>
 
-      <section class="status-row">
-        <div id="bars" class="bars" aria-hidden="true">
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
+      <section class="listen-panel">
+        <div class="status-row">
+          <div id="bars" class="bars" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span>
+          </div>
+          <span id="statusText" class="status-text"></span>
         </div>
-        <span id="statusText">Pronto para ouvir</span>
-      </section>
 
-      <button id="recognizeBtn" class="accent-button primary-button" type="button">Ouvir Música</button>
-      <button id="stopBtn" class="muted-button primary-button" type="button" disabled>Parar gravação</button>
+        <button id="recognizeBtn" class="accent-button primary-button" type="button" aria-label="Ouvir Musica" title="Ouvir Musica">
+          <svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M12 2.75a3.25 3.25 0 0 0-3.25 3.25v5.5a3.25 3.25 0 0 0 6.5 0v-5.5A3.25 3.25 0 0 0 12 2.75Z"></path>
+            <path d="M18.5 10.5v1a6.5 6.5 0 0 1-13 0v-1"></path>
+            <path d="M12 18v3.25"></path>
+            <path d="M8.5 21.25h7"></path>
+          </svg>
+          <span class="sr-only">Ouvir Musica</span>
+        </button>
+        <button id="stopBtn" class="muted-button primary-button" type="button" aria-label="Pausar gravacao" title="Pausar gravacao" disabled>
+          <svg class="button-icon pause-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M7.5 5.25h3.25v13.5H7.5Z"></path>
+            <path d="M13.25 5.25h3.25v13.5h-3.25Z"></path>
+          </svg>
+          <span class="sr-only">Pausar gravacao</span>
+        </button>
+      </section>
 
       <section aria-labelledby="resultLabel" class="section-block">
         <p id="resultLabel" class="section-label">Resultado</p>

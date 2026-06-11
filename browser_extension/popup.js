@@ -26,7 +26,7 @@ const DEFAULT_CORRECTIONS = [
 const TEXT = {
   pt: {
     language_button: "EN",
-    ready: "Pronto para ouvir",
+    ready: "",
     listening: "Ouvindo a aba...",
     identifying: "Identificando...",
     loading_engine: "Preparando reconhecimento...",
@@ -36,7 +36,7 @@ const TEXT = {
     no_music: "Música não reconhecida.",
     network_error: "Não consegui consultar o Shazam.",
     recognize_tab: "Ouvir Música",
-    stop: "Parar gravação",
+    stop: "Pausar",
     result: "Resultado",
     history: "Histórico",
     close_history: "Fechar histórico",
@@ -55,7 +55,7 @@ const TEXT = {
   },
   en: {
     language_button: "PT",
-    ready: "Ready to listen",
+    ready: "",
     listening: "Listening to this tab...",
     identifying: "Identifying...",
     loading_engine: "Preparing recognition...",
@@ -65,7 +65,7 @@ const TEXT = {
     no_music: "Song not recognized.",
     network_error: "Could not reach Shazam.",
     recognize_tab: "Listen",
-    stop: "Stop recording",
+    stop: "Pause",
     result: "Result",
     history: "History",
     close_history: "Close history",
@@ -107,6 +107,7 @@ document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
   bindElements();
+  setupWaveformBars();
   bindEvents();
   const stored = await storageGet(STORAGE_DEFAULTS);
   Object.assign(state, stored);
@@ -149,6 +150,23 @@ function bindElements() {
   });
 }
 
+function setupWaveformBars() {
+  const idleHeights = [
+    3, 4, 5, 6, 7, 8, 10, 18, 22, 12, 30,
+    42, 26, 14, 20, 16, 32, 52, 38, 24, 14,
+    20, 16, 32, 42, 26, 14, 22, 16, 12, 8, 6, 4
+  ];
+  els.bars.querySelectorAll("span").forEach((bar, index) => {
+    const idle = idleHeights[index % idleHeights.length];
+    const center = (idleHeights.length - 1) / 2;
+    const distance = Math.abs(index - center) / center;
+    const peak = Math.round(idle + 18 + (32 * (1 - distance)));
+    bar.style.setProperty("--i", String(index));
+    bar.style.setProperty("--idle", String(idle));
+    bar.style.setProperty("--peak", String(Math.max(idle + 10, peak)));
+  });
+}
+
 function bindEvents() {
   els.languageBtn.addEventListener("click", toggleLanguage);
   els.recognizeBtn.addEventListener("click", recognizeCurrentTab);
@@ -164,10 +182,19 @@ function tr(key) {
   return (TEXT[state.language] || TEXT.pt)[key] || key;
 }
 
+function setIconButtonLabel(button, label) {
+  button.setAttribute("aria-label", label);
+  button.title = label;
+  const hiddenLabel = button.querySelector(".sr-only");
+  if (hiddenLabel) {
+    hiddenLabel.textContent = label;
+  }
+}
+
 function applyLanguage() {
   els.languageBtn.textContent = tr("language_button");
-  els.recognizeBtn.textContent = tr("recognize_tab");
-  els.stopBtn.textContent = tr("stop");
+  setIconButtonLabel(els.recognizeBtn, tr("recognize_tab"));
+  setIconButtonLabel(els.stopBtn, tr("stop"));
   els.resultLabel.textContent = tr("result");
   els.historyToggleBtn.textContent = state.historyVisible ? tr("close_history") : tr("history");
   els.clearResultBtn.textContent = tr("clear_result");
@@ -353,7 +380,7 @@ async function showRecognition(result) {
   setStatus(tr("recognized"));
   els.songTitle.textContent = result.title || tr("unknown");
   els.songArtist.textContent = result.artist || tr("unknown");
-  els.youtubeBtn.disabled = !getDirectYoutubeUrl(result);
+  els.youtubeBtn.disabled = !state.lastQuery;
   els.spotifyBtn.disabled = !state.lastQuery;
   els.platformLinks.classList.remove("hidden");
   els.resultCard.classList.remove("hidden");
@@ -598,7 +625,7 @@ async function resolvePlatformLinks(result, query) {
     await enrichYoutubeUrl(result, query);
     await enrichSpotifyUrl(result);
     if (state.lastResult === result) {
-      els.youtubeBtn.disabled = !getDirectYoutubeUrl(result);
+      els.youtubeBtn.disabled = !state.lastQuery;
       els.spotifyBtn.disabled = !state.lastQuery;
     }
   } catch (_error) {
@@ -814,15 +841,13 @@ function openPlatform(platform) {
     return;
   }
   if (platform === "youtube") {
-    const directYoutubeUrl = getDirectYoutubeUrl(state.lastResult);
-    if (directYoutubeUrl) {
-      chrome.tabs.create({ url: directYoutubeUrl });
-    }
+    chrome.tabs.create({
+      url: `https://www.youtube.com/results?search_query=${encodeURIComponent(state.lastQuery)}`
+    });
     return;
   }
-  const directSpotifyUrl = getDirectSpotifyUrl(state.lastResult);
   chrome.tabs.create({
-    url: directSpotifyUrl || `https://open.spotify.com/search/${encodeURIComponent(state.lastQuery)}`
+    url: `https://open.spotify.com/search/${encodeURIComponent(state.lastQuery)}`
   });
 }
 
